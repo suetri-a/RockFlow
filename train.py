@@ -5,6 +5,9 @@ import shutil
 import random
 import warnings
 from itertools import islice
+from datetime import datetime
+from pytz import timezone
+import pytz
 
 import torch
 import torch.nn.functional as F
@@ -12,6 +15,7 @@ import torch.optim as optim
 import torch.utils.data as data
 from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
 
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
@@ -28,7 +32,7 @@ from model import Glow
 parser = argparse.ArgumentParser()
 
 ##### DATASET OPTIONS
-parser.add_argument("--dataset", type=str, default="Doddington", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton"], help="Type of the dataset to be used.")
+parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer"], help="Type of the dataset to be used.")
 parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
 parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -89,7 +93,7 @@ def check_dataset(dataset, dataroot, augment, download, patch_size):
         svhn = get_SVHN(augment, dataroot, download)
         input_size, num_classes, train_dataset, test_dataset = svhn
 
-    if dataset in ['Berea','Doddington','Ketton']:
+    if dataset in ['Berea','Doddington','Ketton','Bentheimer']:
         rock = get_rock_dataset(dataset, patch_size)
         input_size, num_classes, train_dataset, test_dataset = rock
 
@@ -148,7 +152,9 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True)
     test_loader = data.DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=n_workers, drop_last=False)
-
+    
+    logdir = name + 'run_' + datetime.now(tz=pytz.utc).astimezone(timezone('US/Pacific').strftime("%Y%m%d-%H%M")
+    writer = SummaryWriter(log_dir)
     model = Glow(image_shape, hidden_channels, K, L, actnorm_scale, flow_permutation, flow_coupling,
                 LU_decomposed, num_classes, learn_top, y_condition)
 
@@ -293,11 +299,16 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
         
         grid = make_grid(images[:30], nrow=5, padding=10).permute(1,2,0)
 
-        plt.figure()
+        fig = plt.figure()
         plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
         plt.imshow(grid)
-        plt.axis('off') 
+        plt.axis('off')
         plt.savefig(os.path.join('results', name, 'example_imgs', str(engine.state.iteration)+'.png'))
+
+        writer.add_scalar(tag='Train loss', engine.state.metrics['total_loss'], engine.state.iteration)
+        writer.add_figure('Sample output', fig, global_step=engine.state.iteration)
+
+        plt.close(fig)
 
 
     # Log end of epoch information
@@ -313,6 +324,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
         print(f"Validation Results - Epoch: {engine.state.epoch} {losses}")
 
+    writer.add_scalar(tag='Train epoch loss', engine.state.metrics['total_loss'], engine.state.epoch)
+    writer.add_scalar(tag='Val epoch loss', losses, engine.state.epoch)
 
     timer = Timer(average=True)
     timer.attach(trainer, start=Events.EPOCH_STARTED, resume=Events.ITERATION_STARTED, 

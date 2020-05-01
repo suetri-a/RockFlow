@@ -111,16 +111,18 @@ class RockDataset(Dataset):
 
     def __init__(self, dataset_name, patch_size=64, train = True):
         
-        self.length = 10000
+        # self.length = 10000
         self.dataset_name = dataset_name
         self.data_dir = os.path.join('data', dataset_name)
         
         imgs = glob.glob(os.path.join(self.data_dir, '*.tif'))
 
         if train:
+            self.length = 10000
             self.img_num_min = 0
             self.img_num_max = int(0.8*len(imgs))
         else:
+            self.length = 1000
             self.img_num_min = int(0.8*len(imgs))+1
             self.img_num_max = len(imgs)
 
