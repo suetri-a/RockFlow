@@ -7,7 +7,6 @@ import warnings
 from itertools import islice
 from datetime import datetime
 from pytz import timezone
-import pytz
 
 import torch
 import torch.nn.functional as F
@@ -70,7 +69,7 @@ parser.add_argument("--fresh", action="store_true", help="Remove output director
 parser.add_argument("--saved_model",default="",help="Path to model to load for continuing training")
 parser.add_argument("--saved_optimizer",default="",help="Path to optimizer to load for continuing training")
 parser.add_argument("--seed", type=int, default=0, help="manual seed")
-
+parser.add_argument("--output_dir",default="", help="Output directory to for saved results")
 
 
 ################################ TRAINING FUNCTIONS #######################################
@@ -138,7 +137,7 @@ def compute_loss_y(nll, y_logits, y_weight, y, multi_class, reduction="mean"):
 def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epochs, saved_model,
         seed, hidden_channels, K, L, actnorm_scale, flow_permutation, flow_coupling, LU_decomposed, patch_size,
         learn_top, y_condition, y_weight, max_grad_clip, max_grad_norm, lr,
-        n_workers, cuda, n_init_batches, name, saved_optimizer, warmup):
+        n_workers, cuda, n_init_batches, name, saved_optimizer, warmup, output_dir):
 
     device = "cpu" if (not torch.cuda.is_available() or not cuda) else "cuda:0"
 
@@ -152,9 +151,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True)
     test_loader = data.DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=n_workers, drop_last=False)
-    
-    logdir = name + 'run_' + datetime.now(tz=pytz.utc).astimezone(timezone('US/Pacific').strftime("%Y%m%d-%H%M")
-    writer = SummaryWriter(log_dir)
+
+    writer = SummaryWriter(output_dir)
     model = Glow(image_shape, hidden_channels, K, L, actnorm_scale, flow_permutation, flow_coupling,
                 LU_decomposed, num_classes, learn_top, y_condition)
 
@@ -214,7 +212,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     trainer = Engine(step)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        checkpoint_handler = ModelCheckpoint(os.path.join('results', name), "glow", save_interval=1, n_saved=2, require_empty=False)
+        #checkpoint_handler = ModelCheckpoint(os.path.join('results', name), "glow", save_interval=1, n_saved=2, require_empty=False)
+        checkpoint_handler = ModelCheckpoint(output_dir, "glow", save_interval=1, n_saved=2, require_empty=False)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model, "optimizer": optimizer})
 
@@ -278,11 +277,11 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
 
     # Log sampled images
-    @trainer.on(Events.ITERATION_COMPLETED(every=50))
+    @trainer.on(Events.ITERATION_COMPLETED(every=5))
     def sample(engine):
         
-        if not os.path.exists(os.path.join('results', name, 'example_imgs')):
-            os.makedirs(os.path.join('results', name, 'example_imgs'))
+        if not os.path.exists(os.path.join(output_dir, 'example_imgs')):
+            os.makedirs(os.path.join(output_dir, 'example_imgs'))
 
         model.eval()
 
@@ -303,9 +302,10 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
         plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
         plt.imshow(grid)
         plt.axis('off')
-        plt.savefig(os.path.join('results', name, 'example_imgs', str(engine.state.iteration)+'.png'))
+        # plt.savefig(os.path.join('results', name, 'example_imgs', str(engine.state.iteration)+'.png'))
+        plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
 
-        writer.add_scalar(tag='Train loss', engine.state.metrics['total_loss'], engine.state.iteration)
+        writer.add_scalar('Total_loss', engine.state.metrics["total_loss"], engine.state.iteration)
         writer.add_figure('Sample output', fig, global_step=engine.state.iteration)
 
         plt.close(fig)
@@ -324,8 +324,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
         print(f"Validation Results - Epoch: {engine.state.epoch} {losses}")
 
-    writer.add_scalar(tag='Train epoch loss', engine.state.metrics['total_loss'], engine.state.epoch)
-    writer.add_scalar(tag='Val epoch loss', losses, engine.state.epoch)
+    #writer.add_scalar(tag='Train epoch loss', engine.state.metrics['total_loss'], engine.state.epoch)
+    #writer.add_scalar(tag='Val epoch loss', losses, engine.state.epoch)
 
     timer = Timer(average=True)
     timer.attach(trainer, start=Events.EPOCH_STARTED, resume=Events.ITERATION_STARTED, 
@@ -340,7 +340,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     # Run training
     trainer.run(train_loader, epochs)
 
-
+    writer.close()
 
 ######################################## RUN TRAINING ####################################
 
@@ -351,8 +351,14 @@ if __name__ == "__main__":
     if   not os.path.exists('results'):
         os.makedirs('results')
 
+    now_utc = datetime.now(timezone('UTC'))
+    now_pacific = now_utc.astimezone(timezone('US/Pacific'))
+    args.output_dir = args.name + 'run_' + now_pacific.strftime("%Y%m%d-%H%M%S")
+    print(args.output_dir)
+
     try:
-        os.makedirs(os.path.join('results',args.name))
+        #os.makedirs(os.path.join('results',args.name))
+        os.makedirs(args.output_dir)
 
     except FileExistsError:
         if args.fresh:
@@ -364,8 +370,10 @@ if __name__ == "__main__":
     kwargs = vars(args)
     del kwargs["fresh"]
 
-    with open(os.path.join('results',args.name, "hparams.json"), "w") as fp:
-        json.dump(kwargs, fp, sort_keys=True, indent=4)
+    #with open(os.path.join('results',args.name, "hparams.json"), "w") as fp:
+    #    json.dump(kwargs, fp, sort_keys=True, indent=4)
     
+    with open(os.path.join(args.output_dir, "hparams.json"), "w") as fp:
+        json.dump(kwargs, fp, sort_keys=True, indent=4)
 
     main(**kwargs)
