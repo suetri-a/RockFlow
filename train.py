@@ -31,7 +31,7 @@ from model import Glow
 parser = argparse.ArgumentParser()
 
 ##### DATASET OPTIONS
-parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer"], help="Type of the dataset to be used.")
+parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer", "VacaMuerta"], help="Type of the dataset to be used.")
 parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
 parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -92,7 +92,7 @@ def check_dataset(dataset, dataroot, augment, download, patch_size):
         svhn = get_SVHN(augment, dataroot, download)
         input_size, num_classes, train_dataset, test_dataset = svhn
 
-    if dataset in ['Berea','Doddington','Ketton','Bentheimer']:
+    if dataset in ['Berea','Doddington','Ketton','Bentheimer','VacaMuerta']:
         rock = get_rock_dataset(dataset, patch_size)
         input_size, num_classes, train_dataset, test_dataset = rock
 
@@ -277,7 +277,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
 
     # Log sampled images
-    @trainer.on(Events.ITERATION_COMPLETED(every=5))
+    @trainer.on(Events.ITERATION_COMPLETED(every=50))
     def sample(engine):
         
         if not os.path.exists(os.path.join(output_dir, 'example_imgs')):
@@ -325,7 +325,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
         print(f"Validation Results - Epoch: {engine.state.epoch} {losses}")
 
     #writer.add_scalar(tag='Train epoch loss', engine.state.metrics['total_loss'], engine.state.epoch)
-    #writer.add_scalar(tag='Val epoch loss', losses, engine.state.epoch)
+    #writer.add_scalar(Val_epoch_loss, losses, engine.state.epoch)
 
     timer = Timer(average=True)
     timer.attach(trainer, start=Events.EPOCH_STARTED, resume=Events.ITERATION_STARTED, 
@@ -353,7 +353,7 @@ if __name__ == "__main__":
 
     now_utc = datetime.now(timezone('UTC'))
     now_pacific = now_utc.astimezone(timezone('US/Pacific'))
-    args.output_dir = args.name + 'run_' + now_pacific.strftime("%Y%m%d-%H%M%S")
+    args.output_dir = args.name + 'run_' + now_pacific.strftime("%y%m%d-%H%M%S")
     print(args.output_dir)
 
     try:
