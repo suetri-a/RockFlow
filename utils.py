@@ -1,5 +1,6 @@
 import math
 import torch
+import os
 
 
 def compute_same_pad(kernel_size, stride):
@@ -43,3 +44,19 @@ def split_feature(tensor, type="split"):
         return tensor[:, :C // 2, ...], tensor[:, C // 2:, ...]
     elif type == "cross":
         return tensor[:, 0::2, ...], tensor[:, 1::2, ...]
+
+
+def create_image_slideshow(image_dir, picture_format=None):
+    '''
+    Create image slideshow using FFMPEG:
+        https://www.ffmpeg.org/
+
+    
+    '''
+    if picture_format is None:
+        raise Exception('Please enter a valid string for \'picture format\'.')
+
+    mov_path = os.path.join(image_dir,'slideshow.mp4')
+    if os.path.exists(mov_path):
+        os.remove(mov_path)
+    os.system('ffmpeg -framerate 5 -i {} -pix_fmt yuv420p {}'.format(os.path.join(image_dir,picture_format), mov_path))

@@ -212,7 +212,6 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     trainer = Engine(step)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        #checkpoint_handler = ModelCheckpoint(os.path.join('results', name), "glow", save_interval=1, n_saved=2, require_empty=False)
         checkpoint_handler = ModelCheckpoint(output_dir, "glow", save_interval=1, n_saved=2, require_empty=False)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model, "optimizer": optimizer})
@@ -277,7 +276,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
 
     # Log sampled images
-    @trainer.on(Events.ITERATION_COMPLETED(every=5))
+    @trainer.on(Events.ITERATION_COMPLETED(every=50))
     def sample(engine):
         
         if not os.path.exists(os.path.join(output_dir, 'example_imgs')):
@@ -302,7 +301,6 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
         plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
         plt.imshow(grid)
         plt.axis('off')
-        # plt.savefig(os.path.join('results', name, 'example_imgs', str(engine.state.iteration)+'.png'))
         plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
 
         writer.add_scalar('Total_loss', engine.state.metrics["total_loss"], engine.state.iteration)
