@@ -152,7 +152,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True)
     test_loader = data.DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=n_workers, drop_last=False)
 
-    writer = SummaryWriter(output_dir)
+    writer = SummaryWriter(os.path.join('results',output_dir))
     model = Glow(image_shape, hidden_channels, K, L, actnorm_scale, flow_permutation, flow_coupling,
                 LU_decomposed, num_classes, learn_top, y_condition)
 
@@ -212,7 +212,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     trainer = Engine(step)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        checkpoint_handler = ModelCheckpoint(output_dir, "glow", save_interval=1, n_saved=2, require_empty=False)
+        checkpoint_handler = ModelCheckpoint(os.path.join('results',output_dir), "glow", save_interval=1, n_saved=2, require_empty=False)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model, "optimizer": optimizer})
 
@@ -279,8 +279,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     @trainer.on(Events.ITERATION_COMPLETED(every=50))
     def sample(engine):
         
-        if not os.path.exists(os.path.join(output_dir, 'example_imgs')):
-            os.makedirs(os.path.join(output_dir, 'example_imgs'))
+        if not os.path.exists(os.path.join('results', output_dir, 'example_imgs')):
+            os.makedirs(os.path.join('results', output_dir, 'example_imgs'))
 
         model.eval()
 
@@ -301,7 +301,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
         plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
         plt.imshow(grid)
         plt.axis('off')
-        plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
+        plt.savefig(os.path.join('results', output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
 
         writer.add_scalar('Total_loss', engine.state.metrics["total_loss"], engine.state.iteration)
         writer.add_figure('Sample output', fig, global_step=engine.state.iteration)
@@ -352,17 +352,17 @@ if __name__ == "__main__":
     now_utc = datetime.now(timezone('UTC'))
     now_pacific = now_utc.astimezone(timezone('US/Pacific'))
     args.output_dir = args.name + 'run_' + now_pacific.strftime("%y%m%d-%H%M%S")
-    print(args.output_dir)
+    print('results/'+args.output_dir)
 
     try:
         #os.makedirs(os.path.join('results',args.name))
-        os.makedirs(args.output_dir)
+        os.makedirs(os.path.join('results', args.output_dir))
 
     except FileExistsError:
         if args.fresh:
-            shutil.rmtree(os.path.join('results',args.name))
-            os.makedirs(os.path.join('results',args.name))
-        if (not os.path.isdir(os.path.join('results',args.name))) or (len(os.listdir(os.path.join('results',args.name))) > 0):
+            shutil.rmtree(os.path.join('results',args.output_dir))
+            os.makedirs(os.path.join('results',args.output_dir))
+        if (not os.path.isdir(os.path.join('results',args.output_dir))) or (len(os.listdir(os.path.join('results',args.output_dir))) > 0):
             raise FileExistsError("Please provide a path to a non-existing or empty directory. Alternatively, pass the --fresh flag.")
 
     kwargs = vars(args)
@@ -371,7 +371,7 @@ if __name__ == "__main__":
     #with open(os.path.join('results',args.name, "hparams.json"), "w") as fp:
     #    json.dump(kwargs, fp, sort_keys=True, indent=4)
     
-    with open(os.path.join(args.output_dir, "hparams.json"), "w") as fp:
+    with open(os.path.join('results', args.output_dir, "hparams.json"), "w") as fp:
         json.dump(kwargs, fp, sort_keys=True, indent=4)
 
     main(**kwargs)
