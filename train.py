@@ -21,7 +21,7 @@ from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, Timer
 from ignite.metrics import RunningAverage, Loss
 
-from datasets import get_CIFAR10, get_SVHN, get_rock_dataset, postprocess
+from datasets import get_rock_dataset, postprocess
 from model import Glow
 
 
@@ -31,7 +31,7 @@ from model import Glow
 parser = argparse.ArgumentParser()
 
 ##### DATASET OPTIONS
-parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer"], help="Type of the dataset to be used.")
+parser.add_argument("--dataset", action='append', type=str, help="Type of the dataset to be used.")
 parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
 parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -44,7 +44,7 @@ parser.add_argument("--actnorm_scale", type=float, default=1.0, help="Act norm s
 parser.add_argument("--flow_permutation",type=str,default="invconv",choices=["invconv", "shuffle", "reverse"],help="Type of flow permutation")
 parser.add_argument("--flow_coupling",type=str,default="affine",choices=["additive", "affine"],help="Type of flow coupling")
 parser.add_argument("--no_LU_decomposed",action="store_false",dest="LU_decomposed",help="Train with LU decomposed 1x1 convs")
-parser.add_argument("--patch_size",type=int, default=64, help="size of input rock image patches")
+parser.add_argument("--patch_size",type=int, default=128, help="size of input rock image patches")
 
 
 ##### TRAINING OPTIONS
@@ -54,9 +54,9 @@ parser.add_argument("--y_weight", type=float, default=0.01, help="Weight for cla
 parser.add_argument("--max_grad_clip",type=float,default=0,help="Max gradient value (clip above - for off)")
 parser.add_argument("--max_grad_norm",type=float,default=0,help="Max norm of gradient (clip above - 0 for off)")
 parser.add_argument("--n_workers", type=int, default=6, help="number of data loading workers")
-parser.add_argument("--batch_size", type=int, default=16, help="batch size used during training")
-parser.add_argument("--eval_batch_size",type=int,default=512,help="batch size used during evaluation")
-parser.add_argument("--epochs", type=int, default=100, help="number of epochs to train for")
+parser.add_argument("--batch_size", type=int, default=4, help="batch size used during training")
+parser.add_argument("--eval_batch_size",type=int,default=8,help="batch size used during evaluation")
+parser.add_argument("--epochs", type=int, default=25, help="number of epochs to train for")
 parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
 parser.add_argument("--warmup",type=float,default=5,help="Use this number of epochs to warmup learning rate linearly from zero to learning rate")  # noqa
 parser.add_argument("--n_init_batches",type=int,default=8,help="Number of batches to use for Act Norm initialisation")
@@ -84,17 +84,8 @@ def check_manual_seed(seed):
 
 
 def check_dataset(dataset, dataroot, augment, download, patch_size):
-    if dataset == "cifar10":
-        cifar10 = get_CIFAR10(augment, dataroot, download)
-        input_size, num_classes, train_dataset, test_dataset = cifar10
-        
-    if dataset == "svhn":
-        svhn = get_SVHN(augment, dataroot, download)
-        input_size, num_classes, train_dataset, test_dataset = svhn
 
-    if dataset in ['Berea','Doddington','Ketton','Bentheimer']:
-        rock = get_rock_dataset(dataset, patch_size)
-        input_size, num_classes, train_dataset, test_dataset = rock
+    input_size, num_classes, train_dataset, test_dataset = get_rock_dataset(dataset, patch_size)
 
     return input_size, num_classes, train_dataset, test_dataset
 
@@ -295,18 +286,28 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
             images = postprocess(model(y_onehot=y, temperature=1, reverse=True)).cpu()
         
         
-        grid = make_grid(images[:30], nrow=5, padding=10).permute(1,2,0)
-
-        fig = plt.figure()
-        plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
-        plt.imshow(grid)
-        plt.axis('off')
-        plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
+        if train_dataset.num_modalities > 1:
+            for i, m in enumerate(train_dataset.modalities):
+                grid = make_grid(torch.unsqueeze(images[:30,i,...],1), nrow=5, padding=10).permute(1,2,0)
+                fig = plt.figure()
+                plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
+                plt.imshow(grid)
+                plt.axis('off')
+                plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'_'+m+'.png'))
+                plt.close(fig)
+        else:
+            grid = make_grid(images[:30], nrow=5, padding=10).permute(1,2,0)
+            fig = plt.figure()
+            plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
+            plt.imshow(grid)
+            plt.axis('off')
+            plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
+            plt.close(fig)
 
         writer.add_scalar('Total_loss', engine.state.metrics["total_loss"], engine.state.iteration)
         writer.add_figure('Sample output', fig, global_step=engine.state.iteration)
 
-        plt.close(fig)
+        
 
 
     # Log end of epoch information
@@ -322,8 +323,6 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
         print(f"Validation Results - Epoch: {engine.state.epoch} {losses}")
 
-    #writer.add_scalar(tag='Train epoch loss', engine.state.metrics['total_loss'], engine.state.epoch)
-    #writer.add_scalar(tag='Val epoch loss', losses, engine.state.epoch)
 
     timer = Timer(average=True)
     timer.attach(trainer, start=Events.EPOCH_STARTED, resume=Events.ITERATION_STARTED, 
@@ -346,16 +345,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if   not os.path.exists('results'):
+    if not os.path.exists('results'):
         os.makedirs('results')
 
-    now_utc = datetime.now(timezone('UTC'))
-    now_pacific = now_utc.astimezone(timezone('US/Pacific'))
-    args.output_dir = args.name + 'run_' + now_pacific.strftime("%Y%m%d-%H%M%S")
-    print(args.output_dir)
+    args.output_dir = os.path.join('results', args.name)
 
     try:
-        #os.makedirs(os.path.join('results',args.name))
         os.makedirs(args.output_dir)
 
     except FileExistsError:
@@ -368,9 +363,6 @@ if __name__ == "__main__":
     kwargs = vars(args)
     del kwargs["fresh"]
 
-    #with open(os.path.join('results',args.name, "hparams.json"), "w") as fp:
-    #    json.dump(kwargs, fp, sort_keys=True, indent=4)
-    
     with open(os.path.join(args.output_dir, "hparams.json"), "w") as fp:
         json.dump(kwargs, fp, sort_keys=True, indent=4)
 

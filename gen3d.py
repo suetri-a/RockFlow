@@ -25,8 +25,8 @@ parser.add_argument('--model', help='Name of model checkpoint to load')
 
 
 # Stack generation parameters
-parser.add_argument('--steps', default=None, help='Number of intermediate images to interpolate between')
-parser.add_argument('--temperature', default=1, help='Temperature value for sampling distribution')
+parser.add_argument('--steps', type=int, default=None, help='Number of intermediate images to interpolate between')
+parser.add_argument('--temperature', type=float, default=1, help='Temperature value for sampling distribution')
 
 
 
@@ -68,7 +68,7 @@ def main(args):
 
         print('Sampling images...')
         mean, logs = model.prior(None, None)
-        alpha = 1-torch.reshape(torch.linspace(0, 1, steps=64 // steps),(-1,1,1,1))
+        alpha = 1-torch.reshape(torch.linspace(0, 1, steps= hparams['patch_size'] // steps),(-1,1,1,1))
         alpha = alpha.to(device)    
 
         num_imgs = steps + 1
@@ -79,7 +79,7 @@ def main(args):
         images = postprocess(images_raw).cpu()
 
     print('Creating video...')
-    for i in range(64):
+    for i in range(hparams['patch_size']):
         plt.imsave(os.path.join(stack_dir, 'image{}.png'.format(str(i).zfill(3))), 
                 np.squeeze(images[i].numpy()), cmap='gray')
 
