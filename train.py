@@ -31,7 +31,7 @@ from model import Glow
 parser = argparse.ArgumentParser()
 
 ##### DATASET OPTIONS
-parser.add_argument("--dataset", action='append', type=str, help="Type of the dataset to be used.")
+parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer", "VacaMuerta"], help="Type of the dataset to be used.")
 parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
 parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -85,7 +85,9 @@ def check_manual_seed(seed):
 
 def check_dataset(dataset, dataroot, augment, download, patch_size):
 
-    input_size, num_classes, train_dataset, test_dataset = get_rock_dataset(dataset, patch_size)
+    if dataset in ['Berea','Doddington','Ketton','Bentheimer','VacaMuerta']:
+        rock = get_rock_dataset(dataset, patch_size)
+        input_size, num_classes, train_dataset, test_dataset = rock
 
     return input_size, num_classes, train_dataset, test_dataset
 
@@ -143,7 +145,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True)
     test_loader = data.DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=n_workers, drop_last=False)
 
-    writer = SummaryWriter(output_dir)
+    writer = SummaryWriter(os.path.join('results',output_dir))
     model = Glow(image_shape, hidden_channels, K, L, actnorm_scale, flow_permutation, flow_coupling,
                 LU_decomposed, num_classes, learn_top, y_condition)
 
@@ -203,7 +205,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     trainer = Engine(step)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        checkpoint_handler = ModelCheckpoint(output_dir, "glow", save_interval=1, n_saved=2, require_empty=False)
+        checkpoint_handler = ModelCheckpoint(os.path.join('results',output_dir), "glow", save_interval=1, n_saved=2, require_empty=False)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model, "optimizer": optimizer})
 
@@ -270,8 +272,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     @trainer.on(Events.ITERATION_COMPLETED(every=50))
     def sample(engine):
         
-        if not os.path.exists(os.path.join(output_dir, 'example_imgs')):
-            os.makedirs(os.path.join(output_dir, 'example_imgs'))
+        if not os.path.exists(os.path.join('results', output_dir, 'example_imgs')):
+            os.makedirs(os.path.join('results', output_dir, 'example_imgs'))
 
         model.eval()
 
@@ -286,23 +288,13 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
             images = postprocess(model(y_onehot=y, temperature=1, reverse=True)).cpu()
         
         
-        if train_dataset.num_modalities > 1:
-            for i, m in enumerate(train_dataset.modalities):
-                grid = make_grid(torch.unsqueeze(images[:30,i,...],1), nrow=5, padding=10).permute(1,2,0)
-                fig = plt.figure()
-                plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
-                plt.imshow(grid)
-                plt.axis('off')
-                plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'_'+m+'.png'))
-                plt.close(fig)
-        else:
-            grid = make_grid(images[:30], nrow=5, padding=10).permute(1,2,0)
-            fig = plt.figure()
-            plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
-            plt.imshow(grid)
-            plt.axis('off')
-            plt.savefig(os.path.join(output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
-            plt.close(fig)
+        grid = make_grid(images[:30], nrow=5, padding=10).permute(1,2,0)
+
+        fig = plt.figure()
+        plt.title('Samples at Iteration {}'.format(engine.state.iteration))     
+        plt.imshow(grid)
+        plt.axis('off')
+        plt.savefig(os.path.join('results', output_dir, 'example_imgs', str(engine.state.iteration)+'.png'))
 
         writer.add_scalar('Total_loss', engine.state.metrics["total_loss"], engine.state.iteration)
         writer.add_figure('Sample output', fig, global_step=engine.state.iteration)
@@ -323,6 +315,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
 
         print(f"Validation Results - Epoch: {engine.state.epoch} {losses}")
 
+    #writer.add_scalar(tag='Train epoch loss', engine.state.metrics['total_loss'], engine.state.epoch)
+    #writer.add_scalar(Val_epoch_loss, losses, engine.state.epoch)
 
     timer = Timer(average=True)
     timer.attach(trainer, start=Events.EPOCH_STARTED, resume=Events.ITERATION_STARTED, 
@@ -348,22 +342,29 @@ if __name__ == "__main__":
     if not os.path.exists('results'):
         os.makedirs('results')
 
-    args.output_dir = os.path.join('results', args.name)
+    now_utc = datetime.now(timezone('UTC'))
+    now_pacific = now_utc.astimezone(timezone('US/Pacific'))
+    args.output_dir = args.name + 'run_' + now_pacific.strftime("%y%m%d-%H%M%S")
+    print('results/'+args.output_dir)
 
     try:
-        os.makedirs(args.output_dir)
+        #os.makedirs(os.path.join('results',args.name))
+        os.makedirs(os.path.join('results', args.output_dir))
 
     except FileExistsError:
         if args.fresh:
-            shutil.rmtree(os.path.join('results',args.name))
-            os.makedirs(os.path.join('results',args.name))
-        if (not os.path.isdir(os.path.join('results',args.name))) or (len(os.listdir(os.path.join('results',args.name))) > 0):
+            shutil.rmtree(os.path.join('results',args.output_dir))
+            os.makedirs(os.path.join('results',args.output_dir))
+        if (not os.path.isdir(os.path.join('results',args.output_dir))) or (len(os.listdir(os.path.join('results',args.output_dir))) > 0):
             raise FileExistsError("Please provide a path to a non-existing or empty directory. Alternatively, pass the --fresh flag.")
 
     kwargs = vars(args)
     del kwargs["fresh"]
 
-    with open(os.path.join(args.output_dir, "hparams.json"), "w") as fp:
+    #with open(os.path.join('results',args.name, "hparams.json"), "w") as fp:
+    #    json.dump(kwargs, fp, sort_keys=True, indent=4)
+    
+    with open(os.path.join('results', args.output_dir, "hparams.json"), "w") as fp:
         json.dump(kwargs, fp, sort_keys=True, indent=4)
 
     main(**kwargs)
