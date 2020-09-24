@@ -66,7 +66,7 @@ class RockDataset(Dataset):
         subfolders = [name for name in os.listdir(self.data_dir) if os.path.isdir(os.path.join(self.data_dir,name)  )]
         if subfolders:
             self.num_modalities = len(subfolders)
-            self.modalities = subfolders
+            self.modalities = sorted([s.lower() for s in subfolders])
             imgs = sorted(glob.glob(os.path.join(self.data_dir,subfolders[0],'*.tif')))
         else:
             imgs = sorted(glob.glob(os.path.join(self.data_dir, '*.tif')))
