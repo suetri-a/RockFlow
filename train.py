@@ -31,7 +31,11 @@ from model import Glow
 parser = argparse.ArgumentParser()
 
 ##### DATASET OPTIONS
+<<<<<<< HEAD
 parser.add_argument("--dataset", action='append', type=str, help="Type of the dataset to be used.")
+=======
+parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer", "VacaMuerta"], help="Type of the dataset to be used.")
+>>>>>>> b8e263543cd7a607e080da83cb3cc8b72591ebd9
 parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
 parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -85,7 +89,13 @@ def check_manual_seed(seed):
 
 def check_dataset(dataset, dataroot, augment, download, patch_size):
 
+<<<<<<< HEAD
     input_size, num_classes, train_dataset, test_dataset = get_rock_dataset(dataset, patch_size)
+=======
+    if dataset in ['Berea','Doddington','Ketton','Bentheimer','VacaMuerta']:
+        rock = get_rock_dataset(dataset, patch_size)
+        input_size, num_classes, train_dataset, test_dataset = rock
+>>>>>>> b8e263543cd7a607e080da83cb3cc8b72591ebd9
 
     return input_size, num_classes, train_dataset, test_dataset
 
@@ -143,7 +153,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True)
     test_loader = data.DataLoader(test_dataset, batch_size=eval_batch_size, shuffle=False, num_workers=n_workers, drop_last=False)
 
-    writer = SummaryWriter(output_dir)
+    writer = SummaryWriter(os.path.join('results',output_dir))
     model = Glow(image_shape, hidden_channels, K, L, actnorm_scale, flow_permutation, flow_coupling,
                 LU_decomposed, num_classes, learn_top, y_condition)
 
@@ -203,7 +213,7 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     trainer = Engine(step)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        checkpoint_handler = ModelCheckpoint(output_dir, "glow", save_interval=1, n_saved=2, require_empty=False)
+        checkpoint_handler = ModelCheckpoint(os.path.join('results',output_dir), "glow", save_interval=1, n_saved=2, require_empty=False)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model, "optimizer": optimizer})
 
@@ -270,8 +280,8 @@ def main(dataset, dataroot, download, augment, batch_size, eval_batch_size, epoc
     @trainer.on(Events.ITERATION_COMPLETED(every=50))
     def sample(engine):
         
-        if not os.path.exists(os.path.join(output_dir, 'example_imgs')):
-            os.makedirs(os.path.join(output_dir, 'example_imgs'))
+        if not os.path.exists(os.path.join('results', output_dir, 'example_imgs')):
+            os.makedirs(os.path.join('results', output_dir, 'example_imgs'))
 
         model.eval()
 
@@ -355,9 +365,9 @@ if __name__ == "__main__":
 
     except FileExistsError:
         if args.fresh:
-            shutil.rmtree(os.path.join('results',args.name))
-            os.makedirs(os.path.join('results',args.name))
-        if (not os.path.isdir(os.path.join('results',args.name))) or (len(os.listdir(os.path.join('results',args.name))) > 0):
+            shutil.rmtree(os.path.join('results',args.output_dir))
+            os.makedirs(os.path.join('results',args.output_dir))
+        if (not os.path.isdir(os.path.join('results',args.output_dir))) or (len(os.listdir(os.path.join('results',args.output_dir))) > 0):
             raise FileExistsError("Please provide a path to a non-existing or empty directory. Alternatively, pass the --fresh flag.")
 
     kwargs = vars(args)
