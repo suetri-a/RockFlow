@@ -31,11 +31,7 @@ from model import Glow
 parser = argparse.ArgumentParser()
 
 ##### DATASET OPTIONS
-<<<<<<< HEAD
 parser.add_argument("--dataset", action='append', type=str, help="Type of the dataset to be used.")
-=======
-parser.add_argument("--dataset", type=str, default="Bentheimer", choices=["cifar10", "svhn", "Doddington", "Berea", "Ketton", "Bentheimer", "VacaMuerta"], help="Type of the dataset to be used.")
->>>>>>> b8e263543cd7a607e080da83cb3cc8b72591ebd9
 parser.add_argument("--dataroot", type=str, default="./", help="path to dataset")
 parser.add_argument("--download", action="store_true", help="downloads dataset")
 
@@ -89,13 +85,7 @@ def check_manual_seed(seed):
 
 def check_dataset(dataset, dataroot, augment, download, patch_size):
 
-<<<<<<< HEAD
     input_size, num_classes, train_dataset, test_dataset = get_rock_dataset(dataset, patch_size)
-=======
-    if dataset in ['Berea','Doddington','Ketton','Bentheimer','VacaMuerta']:
-        rock = get_rock_dataset(dataset, patch_size)
-        input_size, num_classes, train_dataset, test_dataset = rock
->>>>>>> b8e263543cd7a607e080da83cb3cc8b72591ebd9
 
     return input_size, num_classes, train_dataset, test_dataset
 
