@@ -1,5 +1,5 @@
 from pathlib import Path
-import os, glob
+import os, glob, random
 
 import numpy as np
 import torch
@@ -33,75 +33,22 @@ def postprocess(x):
     return torch.clamp(x, 0, 255).byte()
 
 
-def get_CIFAR10(augment, dataroot, download=True):
-    image_shape = (32, 32, 3)
-    num_classes = 10
-
-    test_transform = transforms.Compose([transforms.ToTensor(), preprocess])
-
-    if augment:
-        transformations = [transforms.RandomAffine(0, translate=(0.1, 0.1)),
-                           transforms.RandomHorizontalFlip()]
-    else:
-        transformations = []
-
-    transformations.extend([transforms.ToTensor(), preprocess])
-
-    train_transform = transforms.Compose(transformations)
-
-    one_hot_encode = lambda target: F.one_hot(torch.tensor(target), num_classes)
-
-    path = Path(dataroot) / 'data' / 'CIFAR10'
-    train_dataset = datasets.CIFAR10(path, train=True,
-                                     transform=train_transform,
-                                     target_transform=one_hot_encode,
-                                     download=download)
-
-    test_dataset = datasets.CIFAR10(path, train=False,
-                                    transform=test_transform,
-                                    target_transform=one_hot_encode,
-                                    download=download)
-
-    return image_shape, num_classes, train_dataset, test_dataset
-
-
-def get_SVHN(augment, dataroot, download=True):
-    image_shape = (32, 32, 3)
-    num_classes = 10
-
-    if augment:
-        transformations = [transforms.RandomAffine(0, translate=(0.1, 0.1))]
-    else:
-        transformations = []
-
-    transformations.extend([transforms.ToTensor(), preprocess])
-    transform = transforms.Compose(transformations)
-
-    one_hot_encode = lambda target: F.one_hot(torch.tensor(target), num_classes)
-
-    path = Path(dataroot) / 'data' / 'SVHN'
-    train_dataset = datasets.SVHN(path, split='train',
-                                  transform=transform,
-                                  target_transform=one_hot_encode,
-                                  download=download)
-
-    test_dataset = datasets.SVHN(path, split='test',
-                                 transform=transform,
-                                 target_transform=one_hot_encode,
-                                 download=download)
-
-    return image_shape, num_classes, train_dataset, test_dataset
-
-
 def get_rock_dataset(rock_name, patch_size):
     '''
     Data loader for rock datasets
     '''
-    ds_train = RockDataset(rock_name, patch_size=patch_size, train=True)
-    ds_test = RockDataset(rock_name, patch_size=patch_size, train=False)
 
-    image_shape = (patch_size, patch_size, 1)
-    num_classes = 1
+    if len(rock_name) == 1:
+        ds = RockDataset
+        rock_name = rock_name[0]
+    else:
+        ds = MultiRockDataset
+
+    ds_train = ds(rock_name, patch_size=patch_size, train=True)
+    ds_test = ds(rock_name, patch_size=patch_size, train=False)
+    
+    image_shape = (patch_size, patch_size, ds_train.num_modalities)
+    num_classes = ds_train.num_rocks
 
     return image_shape, num_classes, ds_train, ds_test
 
@@ -114,22 +61,30 @@ class RockDataset(Dataset):
         # self.length = 10000
         self.dataset_name = dataset_name
         self.data_dir = os.path.join('data', dataset_name)
-        
-        imgs = glob.glob(os.path.join(self.data_dir, '*.tif'))
+        self.num_rocks = 1
+
+        subfolders = [name for name in os.listdir(self.data_dir) if os.path.isdir(os.path.join(self.data_dir,name)  )]
+        if subfolders:
+            self.num_modalities = len(subfolders)
+            self.modalities = sorted([s.lower() for s in subfolders])
+            imgs = sorted(glob.glob(os.path.join(self.data_dir,subfolders[0],'*.tif')))
+        else:
+            imgs = sorted(glob.glob(os.path.join(self.data_dir, '*.tif')))
+            self.num_modalities = 1
+            self.modalities = None
 
         if train:
             self.length = 10000
-            self.img_num_min = 0
-            self.img_num_max = int(0.8*len(imgs))
+            imgs = imgs[:int(0.8*len(imgs))]
         else:
             self.length = 1000
-            self.img_num_min = int(0.8*len(imgs))+1
-            self.img_num_max = len(imgs)
+            imgs = imgs[int(0.8*len(imgs)):]
 
         I = Image.open(imgs[0])
         self.x_dim = I.size[0]
         self.y_dim = I.size[1]
         self.patch_size = patch_size
+        self.imgs = [os.path.basename(fname) for fname in imgs]
 
 
     def __len__(self):
@@ -139,15 +94,25 @@ class RockDataset(Dataset):
 
     def __getitem__(self, idx):
         
-        img_number = np.random.randint(self.img_num_min, high=self.img_num_max)
+        img_number = np.random.randint(0, high=len(self.imgs))
 
         x_coord = np.random.randint(0, high=self.x_dim-self.patch_size)
         y_coord = np.random.randint(0, high=self.y_dim-self.patch_size)
 
-        I = Image.open(os.path.join(self.data_dir, self.dataset_name + str(img_number).zfill(4) + '.tif'))
-        patch = I.crop((x_coord, y_coord, x_coord+self.patch_size, y_coord+self.patch_size))
-        
-        return self.transformation(patch), torch.ones((1))
+        if self.num_modalities > 1:
+            seed = np.random.randint(2147483647)
+            I_list = []
+            for m in self.modalities:
+                random.seed(seed)
+                I = Image.open(os.path.join(self.data_dir, m, self.imgs[img_number]))
+                I_list.append(self.transformation(I.crop((x_coord, y_coord, x_coord+self.patch_size, y_coord+self.patch_size))))
+            patch = torch.cat(I_list, dim=0)
+
+        else:
+            I = Image.open(os.path.join(self.data_dir, self.imgs[img_number]))
+            patch = self.transformation(I.crop((x_coord, y_coord, x_coord+self.patch_size, y_coord+self.patch_size)))
+
+        return patch, torch.ones((1))
 
     
     def transformation(self, I):
@@ -157,3 +122,37 @@ class RockDataset(Dataset):
         '''
         xform= transforms.Compose([transforms.ToTensor(), preprocess])
         return xform(I)
+
+
+class MultiRockDataset(Dataset):
+    
+    def __init__(self, dataset_names, patch_size=64, train = True):
+        self.dataset_names = dataset_names
+        self.num_rocks = len(self.dataset_names)
+
+        if train:
+            self.length = 10000
+        else:
+            self.length = 1000
+
+        self.datasets = []
+        for d in self.dataset_names:
+            self.datasets.append(RockDataset(d, patch_size=patch_size, train=train))
+
+        if any(d.num_modalities>1 for d in self.datasets):
+            raise Exception('Multiclass models not supported for multimodality datasets.')
+
+        self.num_modalities = self.datasets[0].num_modalities
+
+
+    def __len__(self):
+
+        return self.length
+    
+
+    def __getitem__(self, idx):
+        
+        d = np.random.randint(0, high=self.num_rocks)
+        patch, _ = self.datasets[d].__getitem__(idx)
+        
+        return patch, d
