@@ -5,12 +5,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import argparse
 import os
+import glob
 from matplotlib.ticker import ScalarFormatter
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--original', help='Path to csv file for original rock properties} ')
-parser.add_argument('--synthetic', help='Path to csv file for synthetic rock properties} ')
+parser.add_argument('--original', help='Path to folder with original csv files} ')
+parser.add_argument('--synthetic', help='Path to folder with synthetic csv files} ')
 
 parser.add_argument("--perm", type=bool, default=False, help='Include perm or not in graphs')
 parser.add_argument("--perm_path", help="path to csv file with permeability results")
@@ -20,9 +21,17 @@ parser.add_argument('--dim', type=int, default=3, help='2 or 3 for 2D or 3D data
 
 def main(args):
     #Load data
-    img_original = pd.read_csv(args.original)
+
+    # Read individual .csv files from ImageJ script output and compile into a single file
+    original_files = glob.glob(os.path.join(args.original, "*.csv"))
+    img_original = pd.concat((pd.read_csv(f) for f in original_files))
+    #img_original.to_csv(os.path.join(args.original, 'original-compiled.csv'), index=False)
+
+    synthetic_files = glob.glob(os.path.join(args.synthetic, "*.csv"))
+    img_synthetic = pd.concat((pd.read_csv(f) for f in synthetic_files))
+    #img_synthetic.to_csv(os.path.join(args.synthetic, 'synthetic-compiled.csv'), index=False)
+
     img_original["Type"] = 0
-    img_synthetic = pd.read_csv(args.synthetic)
     img_synthetic["Type"] = 1
     img_minkowski = pd.concat([img_original, img_synthetic])
     img_minkowski["Type"] = img_minkowski["Type"].astype("category")
