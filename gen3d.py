@@ -25,6 +25,7 @@ parser.add_argument('--model', help='Name of model checkpoint to load')
 parser.add_argument('--steps', type=int, default=None, help='Number of anchor slices to use in interpolation')
 parser.add_argument('--n_trials', type=int, default=20, help='Number of trials to estimate likelihood for each step number')
 parser.add_argument('--temperature', type=float, default=1, help='Temperature value for sampling distribution')
+parser.add_argument('--iter', type=int, default=0, help='Generate imgs3d_000 to imgs3d_iter folders')
 
 
 def write_video(images, prefix, hparams, stack_dir):
@@ -63,127 +64,128 @@ def main(args):
     model.set_actnorm_init()
     model = model.to(device)
 
-    stack_dir = os.path.join(output_folder, 'imgs3d')
-    if not os.path.exists(stack_dir):
-        os.mkdir(stack_dir)
+    for iter_vol in range(args.iter+1):
+        stack_dir = os.path.join(output_folder, 'imgs3d_' + str(iter_vol).zfill(3))
+        if not os.path.exists(stack_dir):
+            os.mkdir(stack_dir)
 
-    # Build images 
-    model.eval()
+        # Build images
+        model.eval()
 
-    with torch.no_grad():
-        temperature = 1
+        with torch.no_grad():
+            temperature = 1
 
-        if args.steps is None:  # automatically calculate step size if no step size
-            fig_dir = os.path.join(output_folder, 'stepnum_results')
-            if not os.path.exists(fig_dir):
-                os.mkdir(fig_dir)
+            if args.steps is None:  # automatically calculate step size if no step size
+                fig_dir = os.path.join(output_folder, 'stepnum_results')
+                if not os.path.exists(fig_dir):
+                    os.mkdir(fig_dir)
 
-            print('No step size entered')
+                print('No step size entered')
 
-            if os.path.exists(os.path.join(fig_dir, 'result.json')):
-                with open(os.path.join(fig_dir, 'result.json'), 'r') as fp:
-                    results = json.load(fp)
-                steps = results['steps']
+                if os.path.exists(os.path.join(fig_dir, 'result.json')):
+                    with open(os.path.join(fig_dir, 'result.json'), 'r') as fp:
+                        results = json.load(fp)
+                    steps = results['steps']
+
+                else:
+                    print('Pre-computed optimal step size not found. Computing optimal step size...')
+                    mean, logs = model.prior(None, None)
+
+                    n_trials = args.n_trials
+                    step_data_xy = {}
+                    step_data_xz = {}
+                    step_data_yz = {}
+                    steps_list = [i for i in range(3, 33, 2)]
+                    for steps in steps_list:
+
+                        step_data_xy[steps] = []
+                        step_data_xz[steps] = []
+                        step_data_yz[steps] = []
+
+                        for i in range(n_trials):
+                            # Create volume of images
+                            model.eval()
+                            with torch.no_grad():
+                                alpha = 1-torch.reshape(torch.linspace(0,1,steps=steps),(-1,1,1,1))
+                                alpha = alpha.to(device)
+
+                                num_imgs = int(np.ceil(hparams['patch_size'] / steps) + 1)
+                                z = gaussian_sample(mean, logs, temperature)[:num_imgs,...]
+                                z = torch.cat([alpha*z[i,...] + (1-alpha)*z[i+1,...] for i in range(num_imgs-1)])
+                                z = z[:hparams['patch_size'], ...]
+                                images_raw = model(z=z, temperature=temperature, reverse=True)
+                                images_raw[torch.isnan(images_raw)] = 0.0
+
+                                images1 = postprocess(images_raw).cpu()
+                                images2 = postprocess(torch.transpose(images_raw, 0, 2)).cpu()
+                                images3 = postprocess(torch.transpose(images_raw, 0, 3)).cpu()
+
+                                _, xy_likelihood, _ = model(x=images_raw, temperature=temperature)
+                                _, xz_likelihood, _ = model(x=torch.transpose(images_raw, 0, 2), temperature=temperature)
+                                _, yz_likelihood, _ = model(x=torch.transpose(images_raw, 0, 3), temperature=temperature)
+
+                            step_data_xy[steps].append(torch.mean(xy_likelihood).item())
+                            step_data_xz[steps].append(torch.mean(xz_likelihood).item())
+                            step_data_yz[steps].append(torch.mean(yz_likelihood).item())
+
+                    means_xy = [np.mean(np.array(step_data_xy[steps])[~np.isnan(step_data_xy[steps])]) for steps in range(3,33,2)]
+                    stds_xy = [np.std(np.array(step_data_xy[steps])[~np.isnan(step_data_xy[steps])]) for steps in range(3,33,2)]
+                    plt.errorbar(np.arange(3,33,2), means_xy, yerr=stds_xy)
+                    plt.title('Likelihood for x-y plane')
+                    plt.xlabel('Steps between anchor slices')
+                    plt.ylabel('Average obj. over all slices')
+                    plt.savefig(os.path.join(fig_dir, 'x_y_likelihood.png'))
+                    plt.close()
+
+                    means_xz = [np.mean(np.array(step_data_xz[steps])[~np.isnan(step_data_xz[steps])]) for steps in range(3,33,2)]
+                    stds_xz = [np.std(np.array(step_data_xz[steps])[~np.isnan(step_data_xz[steps])]) for steps in range(3,33,2)]
+                    plt.errorbar(np.arange(3,33,2), means_xz, yerr=stds_xz)
+                    plt.title('Likelihood for x-z plane')
+                    plt.xlabel('Steps between anchor slices')
+                    plt.ylabel('Average obj. over all slices')
+                    plt.savefig(os.path.join(fig_dir, 'x_z_likelihood.png'))
+                    plt.close()
+
+                    means_yz = [np.mean(np.array(step_data_yz[steps])[~np.isnan(step_data_yz[steps])]) for steps in range(3,33,2)]
+                    stds_yz = [np.std(np.array(step_data_yz[steps])[~np.isnan(step_data_yz[steps])]) for steps in range(3,33,2)]
+                    plt.errorbar(np.arange(3,33,2), means_yz, yerr=stds_yz)
+                    plt.title('Likelihood for y-z plane')
+                    plt.xlabel('Steps between anchor slices')
+                    plt.ylabel('Average obj. over all slices')
+                    plt.savefig(os.path.join(fig_dir, 'y_z_likelihood.png'))
+                    plt.close()
+
+                    ll_sum = np.array(means_xz) + np.array(means_yz)
+                    valid_idx = np.where(ll_sum > 0)[0]
+                    steps = int(steps_list[valid_idx[ll_sum[valid_idx].argmin()]])
+                    print('Optimal step size: {}'.format(steps))
+
+                    with open(os.path.join(fig_dir, 'result.json'), 'w') as fp:
+                        json.dump({'steps': steps}, fp)
 
             else:
-                print('Pre-computed optimal step size not found. Computing optimal step size...')
-                mean, logs = model.prior(None, None)
+                print('Using user-entered step size {}...'.format(args.steps))
+                steps = args.steps
 
-                n_trials = args.n_trials
-                step_data_xy = {}
-                step_data_xz = {}
-                step_data_yz = {}
-                steps_list = [i for i in range(3, 33, 2)]
-                for steps in steps_list:
-                    
-                    step_data_xy[steps] = []
-                    step_data_xz[steps] = []
-                    step_data_yz[steps] = []
-                    
-                    for i in range(n_trials):
-                        # Create volume of images
-                        model.eval()
-                        with torch.no_grad():
-                            alpha = 1-torch.reshape(torch.linspace(0,1,steps=steps),(-1,1,1,1))
-                            alpha = alpha.to(device)
+            print('Sampling images...')
+            mean, logs = model.prior(None, None)
+            alpha = 1-torch.reshape(torch.linspace(0,1,steps=steps),(-1,1,1,1))
+            alpha = alpha.to(device)
 
-                            num_imgs = int(np.ceil(hparams['patch_size'] / steps) + 1)
-                            z = gaussian_sample(mean, logs, temperature)[:num_imgs,...]
-                            z = torch.cat([alpha*z[i,...] + (1-alpha)*z[i+1,...] for i in range(num_imgs-1)])
-                            z = z[:hparams['patch_size'], ...]
-                            images_raw = model(z=z, temperature=temperature, reverse=True)
-                            images_raw[torch.isnan(images_raw)] = 0.0
-                            
-                            images1 = postprocess(images_raw).cpu()
-                            images2 = postprocess(torch.transpose(images_raw, 0, 2)).cpu()
-                            images3 = postprocess(torch.transpose(images_raw, 0, 3)).cpu()
+            num_imgs = int(np.ceil(hparams['patch_size'] / steps) + 1)
+            z = gaussian_sample(mean, logs, temperature)[:num_imgs,...]
+            z = torch.cat([alpha*z[i,...] + (1-alpha)*z[i+1,...] for i in range(num_imgs-1)])
+            z = z[:hparams['patch_size'], ...]
 
-                            _, xy_likelihood, _ = model(x=images_raw, temperature=temperature)
-                            _, xz_likelihood, _ = model(x=torch.transpose(images_raw, 0, 2), temperature=temperature)
-                            _, yz_likelihood, _ = model(x=torch.transpose(images_raw, 0, 3), temperature=temperature)
+            images_raw = model(z=z, temperature=temperature, reverse=True)
+            images_raw[torch.isnan(images_raw)] = 0.0
+            images1 = postprocess(images_raw).cpu()
+            images2 = postprocess(torch.transpose(images_raw, 0, 2)).cpu()
+            images3 = postprocess(torch.transpose(images_raw, 0, 3)).cpu()
 
-                        step_data_xy[steps].append(torch.mean(xy_likelihood).item())
-                        step_data_xz[steps].append(torch.mean(xz_likelihood).item())
-                        step_data_yz[steps].append(torch.mean(yz_likelihood).item())
-
-                means_xy = [np.mean(np.array(step_data_xy[steps])[~np.isnan(step_data_xy[steps])]) for steps in range(3,33,2)]
-                stds_xy = [np.std(np.array(step_data_xy[steps])[~np.isnan(step_data_xy[steps])]) for steps in range(3,33,2)]
-                plt.errorbar(np.arange(3,33,2), means_xy, yerr=stds_xy)
-                plt.title('Likelihood for x-y plane')
-                plt.xlabel('Steps between anchor slices')
-                plt.ylabel('Average obj. over all slices')
-                plt.savefig(os.path.join(fig_dir, 'x_y_likelihood.png'))
-                plt.close()
-
-                means_xz = [np.mean(np.array(step_data_xz[steps])[~np.isnan(step_data_xz[steps])]) for steps in range(3,33,2)]
-                stds_xz = [np.std(np.array(step_data_xz[steps])[~np.isnan(step_data_xz[steps])]) for steps in range(3,33,2)]
-                plt.errorbar(np.arange(3,33,2), means_xz, yerr=stds_xz)
-                plt.title('Likelihood for x-z plane')
-                plt.xlabel('Steps between anchor slices')
-                plt.ylabel('Average obj. over all slices')
-                plt.savefig(os.path.join(fig_dir, 'x_z_likelihood.png'))
-                plt.close()
-
-                means_yz = [np.mean(np.array(step_data_yz[steps])[~np.isnan(step_data_yz[steps])]) for steps in range(3,33,2)]
-                stds_yz = [np.std(np.array(step_data_yz[steps])[~np.isnan(step_data_yz[steps])]) for steps in range(3,33,2)]
-                plt.errorbar(np.arange(3,33,2), means_yz, yerr=stds_yz)
-                plt.title('Likelihood for y-z plane')
-                plt.xlabel('Steps between anchor slices')
-                plt.ylabel('Average obj. over all slices')
-                plt.savefig(os.path.join(fig_dir, 'y_z_likelihood.png'))
-                plt.close()
-
-                ll_sum = np.array(means_xz) + np.array(means_yz)
-                valid_idx = np.where(ll_sum > 0)[0]
-                steps = int(steps_list[valid_idx[ll_sum[valid_idx].argmin()]])
-                print('Optimal step size: {}'.format(steps))
-
-                with open(os.path.join(fig_dir, 'result.json'), 'w') as fp:
-                    json.dump({'steps': steps}, fp)
-        
-        else:
-            print('Using user-entered step size {}...'.format(args.steps))
-            steps = args.steps
-
-        print('Sampling images...')
-        mean, logs = model.prior(None, None)
-        alpha = 1-torch.reshape(torch.linspace(0,1,steps=steps),(-1,1,1,1))
-        alpha = alpha.to(device)
-
-        num_imgs = int(np.ceil(hparams['patch_size'] / steps) + 1)
-        z = gaussian_sample(mean, logs, temperature)[:num_imgs,...]
-        z = torch.cat([alpha*z[i,...] + (1-alpha)*z[i+1,...] for i in range(num_imgs-1)])
-        z = z[:hparams['patch_size'], ...]
-
-        images_raw = model(z=z, temperature=temperature, reverse=True)
-        images_raw[torch.isnan(images_raw)] = 0.0
-        images1 = postprocess(images_raw).cpu()
-        images2 = postprocess(torch.transpose(images_raw, 0, 2)).cpu()
-        images3 = postprocess(torch.transpose(images_raw, 0, 3)).cpu()
-
-    write_video(images1, 'xy', hparams, stack_dir)
-    write_video(images2, 'xz', hparams, stack_dir)
-    write_video(images3, 'yz', hparams, stack_dir)
+        write_video(images1, 'xy', hparams, stack_dir)
+        write_video(images2, 'xz', hparams, stack_dir)
+        write_video(images3, 'yz', hparams, stack_dir)
     
     print('Finished!')
 
