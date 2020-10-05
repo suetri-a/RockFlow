@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.measure import perimeter 
+from skimage.filters import median
 
 import os
 import json
@@ -25,6 +27,7 @@ parser.add_argument('--model', help='Name of model checkpoint to load')
 parser.add_argument('--steps', type=int, default=None, help='Number of anchor slices to use in interpolation')
 parser.add_argument('--n_trials', type=int, default=20, help='Number of trials to estimate likelihood for each step number')
 parser.add_argument('--temperature', type=float, default=1, help='Temperature value for sampling distribution')
+parser.add_argument('--save_med_filt', action='store_true', help='Save images with median filter applied to x-z and y-z plane images')
 
 
 def write_video(images, prefix, hparams, stack_dir):
