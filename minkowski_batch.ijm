@@ -8,13 +8,16 @@ list = getFileList(dir1)
 // Go through each folder (containing a series of 2D images)
 for (i=0; i<list.length; i++) {
 	// Pick first image to start reading from
-	path = dir1 + list[i] + "image000.png";
+	path = dir1 + list[i] + "xy_image000.png";
 
 	// Stack images into 3D volume
 	run("Image Sequence...", "open=path number=128 convert sort");
 
 	// 3D opening/closing filter
-	run("Morphological Filters (3D)", "operation=Opening element=Ball x-radius=2 y-radius=2 z-radius=2");
+	//run("Morphological Filters (3D)", "operation=Opening element=Ball x-radius=2 y-radius=2 z-radius=2");
+
+	// Median 3D blur
+	run("Median 3D...", "x=1 y=1 z=1");
 
 	// Otsu thresholding on volume, invert
 	run("Auto Threshold", "method=Otsu stack");
