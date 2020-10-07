@@ -30,6 +30,7 @@ parser.add_argument('--n_trials', type=int, default=20, help='Number of trials t
 parser.add_argument('--temperature', type=float, default=1, help='Temperature value for sampling distribution')
 parser.add_argument('--save_med_filt', action='store_true', help='Save images with median filter applied to x-z and y-z plane images')
 parser.add_argument('--iter', type=int, default=0, help='Generate imgs3d_000 to imgs3d_iter folders')
+parser.add_argument('--iter', type=int, default=1, help='Generate imgs3d_000 to imgs3d_iter-1 folders')
 
 
 def write_video(images, prefix, hparams, stack_dir):
@@ -166,6 +167,7 @@ def main(args):
             print('Using user-entered step size {}...'.format(args.steps))
             steps = args.steps
 
+<<<<<<< HEAD
     # Generate training volumes for number of iterations
     for iter_vol in range(args.iter+1):
         stack_dir = os.path.join(output_folder, 'imgs3d_' + str(iter_vol).zfill(3))
@@ -177,6 +179,14 @@ def main(args):
             temperature = 1
 
             print('Sampling images...')
+=======
+        for iter_vol in range(args.iter):
+            stack_dir = os.path.join(output_folder, 'imgs3d_' + str(iter_vol).zfill(3))
+            if not os.path.exists(stack_dir):
+                os.mkdir(stack_dir)
+
+            print('Sampling images, saving to imgs3d_' + str(iter_vol).zfill(3) + '...')
+>>>>>>> 255d7e2118349bee5a39975157a8f42da8503100
             mean, logs = model.prior(None, None)
             alpha = 1-torch.reshape(torch.linspace(0,1,steps=steps),(-1,1,1,1))
             alpha = alpha.to(device)
@@ -192,9 +202,9 @@ def main(args):
             images2 = postprocess(torch.transpose(images_raw, 0, 2)).cpu()
             images3 = postprocess(torch.transpose(images_raw, 0, 3)).cpu()
 
-        write_video(images1, 'xy', hparams, stack_dir)
-        write_video(images2, 'xz', hparams, stack_dir)
-        write_video(images3, 'yz', hparams, stack_dir)
+            write_video(images1, 'xy', hparams, stack_dir)
+            write_video(images2, 'xz', hparams, stack_dir)
+            write_video(images3, 'yz', hparams, stack_dir)
     
     print('Finished!')
 
