@@ -1,6 +1,6 @@
 import numpy as np
 import tifffile
-from utilities import two_point_correlation
+from utils import two_point_correlation
 import pandas as pd
 from tqdm import trange
 import argparse
@@ -39,6 +39,7 @@ def main(args):
     print("Image size is: ", orig_img.shape)
 
     # Calculate covariance for pore phase of original sample
+    print("Saving covariance data for original sample...")
     two_point_covariance_pore_phase_orig = {}
     for i, direc in enumerate(["x", "y", "z"]):
         two_point_direc = two_point_correlation(orig_img, i, var=pore_phase)
@@ -81,7 +82,6 @@ def main(args):
     del two_point_direc
 
     # Compute slope of covariance at origin to get specific surface area, and chord length for each phase
-    print("Saving covariance data for original sample...")
     # Compute radial average
     original_average_pph = radial_average(orig_cov_pph.values.T)
     original_average_gph = radial_average(orig_cov_gph.values.T)
@@ -115,6 +115,7 @@ def main(args):
 
 
     # Repeat process for generated samples (pore phase only)
+    print("Saving covariance data for synthetic samples...")
     for seed in trange(args.seed_min, (args.seed_min + args.seed_max)):
         im_in = tifffile.imread(os.path.join(args.synthetic, "*" + str(seed).zfill(3) + args.ending))
         image = im_in.astype(np.int8)
@@ -146,7 +147,6 @@ def main(args):
     del covariance_df
 
     # Compute slope of covariance at origin, specific surface area, and chord length for each phase
-    print("Saving covariance data for synthetic samples...")
     for i in range(args.seed_min, (args.seed_min + args.seed_max)):
         cov_pph = pd.read_csv(os.path.join(args.output, "S_" + str(i).zfill(3) + "_pph.csv"))
         cov_gph = pd.read_csv(os.path.join(args.output, "S_" + str(i).zfill(3) + "_gph.csv"))
