@@ -69,20 +69,6 @@ def create_image_slideshow(image_dir, picture_format=None):
 @jit
 def two_point_correlation(im, dim, var=0):
     """
-<<<<<<< HEAD
-    FROM: https://github.com/LukasMosser/PorousMediaGan/blob/master/code/notebooks/covariance/utilities.py
-    
-    This method computes the two point correlation,
-    also known as second order moment,
-    for a segmented binary image in the three principal directions.
-    
-    dim = 0: x-direction
-    dim = 1: y-direction
-    dim = 2: z-direction
-    
-    var should be set to the pixel value of the pore-space. (Default 0)
-    
-=======
     This method computes the two point correlation,
     also known as second order moment,
     for a segmented binary image in the three principal directions.
@@ -93,7 +79,6 @@ def two_point_correlation(im, dim, var=0):
 
     var should be set to the pixel value of the pore-space. (Default 0)
 
->>>>>>> 12934716337aa15ec4acc72c4eec791af9a2b547
     The input image im is expected to be three-dimensional.
     """
     if dim == 0: #x_direction
@@ -172,19 +157,3 @@ def compute_loss_y(nll, y_logits, y_weight, y, multi_class, reduction="mean"):
     losses["total_loss"] = losses["nll"] + y_weight * loss_classes
 
     return losses
-                lmax = dim_3 - r
-                for a in range(lmax):
-                    if dim == 0:
-                        pixel1 = im[a, n2, n1]
-                        pixel2 = im[a + r, n2, n1]
-                    elif dim == 1:
-                        pixel1 = im[n1, n2, a]
-                        pixel2 = im[n1, n2, a + r]
-                    elif dim == 2:
-                        pixel1 = im[n1, a, n2]
-                        pixel2 = im[n1, a + r, n2]
-
-                    if pixel1 == var and pixel2 == var:
-                        two_point[n1, n2, r] += 1
-                two_point[n1, n2, r] = two_point[n1, n2, r] / (float(lmax))
-    return two_point
