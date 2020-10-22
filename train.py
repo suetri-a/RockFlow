@@ -191,19 +191,20 @@ def main(args):
 
     # load pre-trained model if given
     if args.saved_model:
-        model.load_state_dict(torch.load(args.saved_model))
+        checkpoint_dict = torch.load(args.saved_model)
+        model.load_state_dict(checkpoint_dict['model'])
         model.set_actnorm_init()
 
-        if args.saved_optimizer:
-            optimizer.load_state_dict(torch.load(args.saved_optimizer))
+        # if args.saved_optimizer:
+        optimizer.load_state_dict(checkpoint_dict['optimizer'])
 
         file_name, _ = os.path.splitext(args.saved_model)
-        resume_epoch = int(file_name.split("_")[-1])
+        resume_iter = int(file_name.split("_")[-1])
 
         @trainer.on(Events.STARTED)
         def resume_training(engine):
-            engine.state.epoch = resume_epoch
-            engine.state.iteration = resume_epoch * len(engine.state.dataloader)
+            engine.state.epoch = int(resume_iter / len(engine.state.dataloader))
+            engine.state.iteration = resume_iter 
 
 
     @trainer.on(Events.STARTED)
