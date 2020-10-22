@@ -10,16 +10,21 @@ from matplotlib.ticker import ScalarFormatter
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--name', type=str, default=None, help='Name of file to save the plot')
 parser.add_argument('--original', help='Path to folder with original csv files} ')
 parser.add_argument('--synthetic', help='Path to folder with synthetic csv files} ')
 
-parser.add_argument("--perm", type=bool, default=False, help='Include perm or not in graphs')
+parser.add_argument("--perm", action='store_true', help='Include perm or not in graphs')
+parser.add_argument("--separate_plots", action='store_true', help='Save plots as separate files')
 parser.add_argument("--perm_path", help="path to csv file with permeability results")
 
 parser.add_argument("--pixel_size", type=int, default=128, help="size of input rock image")
 parser.add_argument('--dim', type=int, default=3, help='2 or 3 for 2D or 3D dataset')
 
 def main(args):
+    if not os.path.exists("figures"):
+        os.mkdir('figures')
+
     #Load data
 
     # Read individual .csv files from ImageJ script output and compile into a single file
@@ -80,7 +85,6 @@ def main(args):
         setp(bp['medians'][0], color='black', linewidth=width, linestyle='dotted')
         setp(bp['medians'][1], color='black', linewidth=width, linestyle='dotted')
 
-
     fig, ax = plt.subplots(1, len(labels), figsize=(48, 12))
 
     for i, prop in enumerate(parameters):
@@ -99,7 +103,6 @@ def main(args):
         ax[j].set_title(r"$" + prop + r"$", fontsize=42, y=1.06)
 
     fig.canvas.draw()
-
     for i in range(len(labels)):
         labels = [item.get_text() for item in ax[i].get_xticklabels()]
         labels[0] = r'$Original$'
@@ -109,7 +112,6 @@ def main(args):
         labels_y = [item.get_text() for item in ax[i].get_yticklabels()]
         ax[i].set_yticklabels(labels_y, fontsize=26)
         ax[i].grid()
-        # ax[i].xaxis.set_major_formatter(ScalarFormatter())
         ax[i].yaxis.set_major_formatter(ScalarFormatter())
 
         if i > 0:
@@ -117,12 +119,27 @@ def main(args):
             ax[i].get_yaxis().get_offset_text().set(va='bottom', ha='left')
             ax[i].yaxis.get_offset_text().set_fontsize(26)
 
-    for i, s in enumerate(units):
-        t = ax[i + 1].text(0.01, 1.016, s, transform=ax[i + 1].transAxes, fontsize=30)
-        t.set_bbox(dict(color='white', alpha=1.0, edgecolor=None))
+    if args.separate_plots:
+        for i in range(len(parameters)):
+            if args.name is None:
+                fname = os.path.join('figures', 'minkowski_functionals{}.png'.format(i))
+            else:
+                fname = os.path.join('figures', '{}_minkowski_functionals{}.png'.format(args.name, i))
+            fig2 = plt.figure()
+            fig2.axes.append(ax[i])
+            fig2.savefig(fname, bbox_extra_artists=None, bbox_inches='tight', dpi=72)
 
-    # Save in results folder (change)
-    fig.savefig(os.path.join("figures/minkowski_functionals.png"), bbox_extra_artists=None, bbox_inches='tight', dpi=72)
+    else:
+        for i, s in enumerate(units):
+            t = ax[i + 1].text(0.01, 1.016, s, transform=ax[i + 1].transAxes, fontsize=30)
+            t.set_bbox(dict(color='white', alpha=1.0, edgecolor=None))
+
+        # Save in results folder (change)
+        if args.name is None:
+            fname = os.path.join('figures', 'minkowski_functionals.png')
+        else:
+            fname = os.path.join('figures', '{}_minkowski_functionals.png'.format(args.name))
+        fig.savefig(fname, bbox_extra_artists=None, bbox_inches='tight', dpi=72)
 
 if __name__ == "__main__":
     args = parser.parse_args()

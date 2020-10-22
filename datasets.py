@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from PIL import Image
+from PIL import Image, ImageFilter
 from torchvision import transforms, datasets
 from torch.utils.data import Dataset
 
@@ -33,21 +33,20 @@ def postprocess(x):
     return torch.clamp(x, 0, 255).byte()
 
 
-def get_rock_dataset(rock_name, patch_size):
+def get_rock_dataset(args):
     '''
     Data loader for rock datasets
     '''
 
-    if len(rock_name) == 1:
+    if len(args.dataset) == 1:
         ds = RockDataset
-        rock_name = rock_name[0]
     else:
         ds = MultiRockDataset
 
-    ds_train = ds(rock_name, patch_size=patch_size, train=True)
-    ds_test = ds(rock_name, patch_size=patch_size, train=False)
+    ds_train = ds(args, train=True)
+    ds_test = ds(args, train=False)
     
-    image_shape = (patch_size, patch_size, ds_train.num_modalities)
+    image_shape = (args.patch_size, args.patch_size, ds_train.num_modalities)
     num_classes = ds_train.num_rocks
 
     return image_shape, num_classes, ds_train, ds_test
@@ -56,14 +55,15 @@ def get_rock_dataset(rock_name, patch_size):
 class RockDataset(Dataset):
 
 
-    def __init__(self, dataset_name, patch_size=64, train = True):
+    def __init__(self, args, train = True):
         
         # self.length = 10000
-        self.dataset_name = dataset_name
-        self.data_dir = os.path.join('data', dataset_name)
+        self.dataset_name = args.dataset[0]
+        self.data_dir = os.path.join('data', args.dataset[0])
         self.num_rocks = 1
+        self.binary_data = args.binary_data
 
-        subfolders = [name for name in os.listdir(self.data_dir) if os.path.isdir(os.path.join(self.data_dir,name)  )]
+        subfolders = [name for name in os.listdir(self.data_dir) if os.path.isdir(os.path.join(self.data_dir,name))]
         if subfolders:
             self.num_modalities = len(subfolders)
             self.modalities = sorted([s.lower() for s in subfolders])
@@ -83,7 +83,7 @@ class RockDataset(Dataset):
         I = Image.open(imgs[0])
         self.x_dim = I.size[0]
         self.y_dim = I.size[1]
-        self.patch_size = patch_size
+        self.patch_size = args.patch_size
         self.imgs = [os.path.basename(fname) for fname in imgs]
 
 
@@ -95,7 +95,6 @@ class RockDataset(Dataset):
     def __getitem__(self, idx):
         
         img_number = np.random.randint(0, high=len(self.imgs))
-
         x_coord = np.random.randint(0, high=self.x_dim-self.patch_size)
         y_coord = np.random.randint(0, high=self.y_dim-self.patch_size)
 
@@ -109,8 +108,14 @@ class RockDataset(Dataset):
             patch = torch.cat(I_list, dim=0)
 
         else:
-            I = Image.open(os.path.join(self.data_dir, self.imgs[img_number]))
+            I = Image.open(os.path.join(self.data_dir, self.imgs[img_number])).convert(mode='L')
+            
+            if self.binary_data:
+                I = I.filter(ImageFilter.BoxBlur(1))
+
             patch = self.transformation(I.crop((x_coord, y_coord, x_coord+self.patch_size, y_coord+self.patch_size)))
+            if self.binary_data: # clamp values away from boundaries if binarized data
+                patch = torch.clamp(patch, -0.35, 0.25)
 
         return patch, torch.ones((1))
 
@@ -120,14 +125,14 @@ class RockDataset(Dataset):
         Image transformation function
 
         '''
-        xform= transforms.Compose([transforms.ToTensor(), preprocess])
+        xform = transforms.Compose([transforms.ToTensor(), preprocess])
         return xform(I)
 
 
 class MultiRockDataset(Dataset):
     
-    def __init__(self, dataset_names, patch_size=64, train = True):
-        self.dataset_names = dataset_names
+    def __init__(self, args, train = True):
+        self.dataset_names = args.dataset
         self.num_rocks = len(self.dataset_names)
 
         if train:
@@ -136,8 +141,9 @@ class MultiRockDataset(Dataset):
             self.length = 1000
 
         self.datasets = []
-        for d in self.dataset_names:
-            self.datasets.append(RockDataset(d, patch_size=patch_size, train=train))
+        for _ in self.dataset_names:
+            self.datasets.append(RockDataset(args, train=train))
+            args.dataset.pop(0)
 
         if any(d.num_modalities>1 for d in self.datasets):
             raise Exception('Multiclass models not supported for multimodality datasets.')
