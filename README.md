@@ -1,4 +1,4 @@
-# Glow
+# RockFlow
 
 This repository is based on a PyTorch implementation of the [Glow](https://arxiv.org/abs/1807.03039) model. Please see documentation at [y0ast/Glow-Pytorch](https://github.com/y0ast/Glow-PyTorch) for further details of the implementation. 
 
