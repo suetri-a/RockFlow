@@ -19,7 +19,7 @@ pillow (6.1)
 
 **Training**
 
-To reproduce the Bentheimer training results, run
+To reproduce the Bentheimer training results, download the dataset [here](https://drive.google.com/file/d/1Cl396qQLoGN0fxaXmr0-gFi7LtRdS-Fy/view?usp=sharing), and run
 
 ```
 python train.py --dataset=Bentheimer --patch_size=128 --batch_size=4 --epochs=30
