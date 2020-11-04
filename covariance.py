@@ -1,3 +1,7 @@
+# Based on notebooks (Compute Covariance.ipnyb and Covariance Analysis.ipnyb) and utilities.py 
+# from: https://github.com/LukasMosser/PorousMediaGan/tree/master/code/notebooks/covariance
+
+# Compute covariance and perform analysis 
 import numpy as np
 import tifffile
 from utils import two_point_correlation
