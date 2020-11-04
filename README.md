@@ -1,5 +1,58 @@
-# Glow
+# RockFlow
 
+This repository is based on a PyTorch implementation of the [Glow](https://arxiv.org/abs/1807.03039) model. Please see documentation at [y0ast/Glow-Pytorch](https://github.com/y0ast/Glow-PyTorch) for further details of the implementation. 
+
+## Setup and run
+
+You will need the following dependencies and python 3.6+
+
+```
+pytorch (tested on 1.1.0)
+torchvision
+pytorch-ignite (0.3.0)
+tqdm
+matplotlib
+tensorboard (1.14.0)
+pytz
+pillow (6.1)
+```
+
+**Training**
+
+To reproduce the Bentheimer training results, run
+
+```
+python train.py --dataset=Bentheimer --patch_size=128 --batch_size=4 --epochs=30
+```
+
+Everything is configurable through command line arguments, see
+
+```
+python train.py --help
+```
+
+for what is possible.
+
+
+**Generation**
+
+For 3D volume generation, to generate N unique volumes, run
+
+```
+python gen3d.py --name=/PATH_TO_RESULTS --model=/MODEL_NAME.pth --iter=N
+```
+
+For additional configurations (step size, post-processing), see
+
+```
+python gen3d.py --help
+```
+
+## Example output
+
+![Bentheimer output example](images/output_ex.png)
+
+<!---
 This repository implements the [Glow](https://arxiv.org/abs/1807.03039) model using PyTorch on the CIFAR-10 and SVHN dataset. We use the trained Glow to reproduce some of the results of the paper ["Do Deep Generative Models Know What They Don't Know?"](https://arxiv.org/abs/1810.09136):
 
 ![Histogram Glow - CIFAR10 and SVHN](images/histogram_glow_cifar_svhn.png)
@@ -65,6 +118,7 @@ PRs for any of these would be very welcome. If you find any problem, feel free t
 
 The model is trained using `adamax` instead of `adam` as in the original implementation. Using `adam` leads to a NLL of 3.48 (vs. 3.39 with `adamax`). Note: when using `adam` you need to set `warmup` to 1, otherwise optimisation gets stuck in a poor local minimum. It's unclear why `adamax` is so important and I'm curious to hear any ideas!
 
+-->
 ## References:
 
 ```

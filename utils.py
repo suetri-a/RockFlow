@@ -1,5 +1,7 @@
 import math
+import random
 import torch
+import torch.nn.functional as F
 import os
 import numpy as np
 from numba import jit
@@ -91,24 +93,67 @@ def two_point_correlation(im, dim, var=0):
         dim_1 = im.shape[0] #x-axis
         dim_2 = im.shape[2] #y-axis
         dim_3 = im.shape[1] #z-axis
+        
 
     two_point = np.zeros((dim_1, dim_2, dim_3))
     for n1 in range(dim_1):
         for n2 in range(dim_2):
             for r in range(dim_3):
-                lmax = dim_3 - r
+                lmax = dim_3-r
                 for a in range(lmax):
                     if dim == 0:
                         pixel1 = im[a, n2, n1]
-                        pixel2 = im[a + r, n2, n1]
+                        pixel2 = im[a+r, n2, n1]
                     elif dim == 1:
                         pixel1 = im[n1, n2, a]
-                        pixel2 = im[n1, n2, a + r]
+                        pixel2 = im[n1, n2, a+r]
                     elif dim == 2:
                         pixel1 = im[n1, a, n2]
-                        pixel2 = im[n1, a + r, n2]
-
+                        pixel2 = im[n1, a+r, n2]
+                    
                     if pixel1 == var and pixel2 == var:
                         two_point[n1, n2, r] += 1
-                two_point[n1, n2, r] = two_point[n1, n2, r] / (float(lmax))
+                two_point[n1, n2, r] = two_point[n1, n2, r]/(float(lmax))
     return two_point
+
+
+################################ TRAINING FUNCTIONS #######################################
+def check_manual_seed(seed):
+    seed = seed or random.randint(1, 10000)
+    random.seed(seed)
+    torch.manual_seed(seed)
+
+    print("Using seed: {seed}".format(seed=seed))
+
+
+def compute_loss(nll, reduction="mean"):
+    if reduction == "mean":
+        losses = {"nll": torch.mean(nll)}
+    elif reduction == "none":
+        losses = {"nll": nll}
+
+    losses["total_loss"] = losses["nll"]
+
+    return losses
+
+
+def compute_loss_y(nll, y_logits, y_weight, y, multi_class, reduction="mean"):
+    if reduction == "mean":
+        losses = {"nll": torch.mean(nll)}
+    elif reduction == "none":
+        losses = {"nll": nll}
+
+    if multi_class:
+        y_logits = torch.sigmoid(y_logits)
+        loss_classes = F.binary_cross_entropy_with_logits(
+            y_logits, y, reduction=reduction
+        )
+    else:
+        loss_classes = F.cross_entropy(
+            y_logits, torch.argmax(y, dim=1), reduction=reduction
+        )
+
+    losses["loss_classes"] = loss_classes
+    losses["total_loss"] = losses["nll"] + y_weight * loss_classes
+
+    return losses
