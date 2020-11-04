@@ -1,3 +1,7 @@
+# Based on notebooks Covariance Graphs Berea.ipynb and utilities.py 
+# from: https://github.com/LukasMosser/PorousMediaGan/tree/master/code/notebooks/covariance
+
+# Create covariance graphs
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
